@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { contractAbi, contractAddress } from "./Constant/constant";
 import Login from "./Conponents/Login";
 import Connected from "./Conponents/Connected";
+import Finished from "./Conponents/Finished";
 import "./App.css";
 import { useEffect, useState } from "react";
 
@@ -10,9 +11,10 @@ function App() {
   const [account, setAccount] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [votingStatus, setVotingStatus] = useState(false);
-  const [remainingTime, setRemainingTime] = useState("");
+  const [remainingTime, setremainingTime] = useState("");
   const [candidates, setCandidates] = useState([]);
   const [number, setnumber] = useState("");
+  const [CanVote, setCanVote] = useState(true);
 
   useEffect(() => {
     // console.log("first");
@@ -33,19 +35,43 @@ function App() {
     };
   });
 
+  async function vote() {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const signer = provider.getSigner();
+    const contractInstance = new ethers.Contract(
+      contractAddress,
+      contractAbi,
+      signer
+    );
+    const tx = await contractInstance.vote(number);
+    await tx.wait();
+    canVote();
+  }
+
+  async function canVote() {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const signer = provider.getSigner();
+    const contractInstance = new ethers.Contract(
+      contractAddress,
+      contractAbi,
+      signer
+    );
+    const voteStatus = await contractInstance.voters(await signer.getAddress());
+    setCanVote(voteStatus);
+  }
+
   async function getCandidates() {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
-    console.log(signer);
     const contractInstance = new ethers.Contract(
       contractAddress,
       contractAbi,
       signer
     );
     const candidatesList = await contractInstance.retrieve();
-    console.log("YO");
-    console.log(candidatesList);
     const formattedCandidates = candidatesList.map((candidate, index) => {
       return {
         index: index,
@@ -65,10 +91,7 @@ function App() {
       contractAbi,
       signer
     );
-    console.log(contractInstance);
     let status = await contractInstance.getVotingStatus();
-    console.log("first");
-    console.log(status);
     setVotingStatus(status);
   }
 
@@ -81,17 +104,14 @@ function App() {
       contractAbi,
       signer
     );
-    console.log(contractInstance);
-    const remaingsTime = await contractInstance.getRemainingTime();
-    console.log("first");
-    console.log(remaingsTime);
-    setRemainingTime(parseInt(remaingsTime, 16));
+    const time = await contractInstance.getRemainingTime();
+    setremainingTime(parseInt(time, 16));
   }
 
   function handleAccountsChanged(accounts) {
     if (accounts.length > 0 && account !== accounts[0]) {
       setAccount(accounts[0]);
-      // canVote();
+      canVote();
     } else {
       setIsConnected(false);
       setAccount(null);
@@ -109,6 +129,7 @@ function App() {
         setAccount(address);
         console.log("metamask address" + address);
         setIsConnected(true);
+        canVote();
       } catch (error) {
         console.log(error);
       }
@@ -116,17 +137,30 @@ function App() {
       console.error("Metamask is detected in the browser");
     }
   }
+
+  function handleNumberChange(e) {
+    setnumber(e.target.value);
+    // console.log(number);
+  }
+
   return (
     <div className="App">
-      {isConnected ? (
-        <Connected
-          account={account}
-          candidates={candidates}
-          remaingTime={remainingTime}
-          number={number}
-        />
+      {votingStatus ? (
+        isConnected ? (
+          <Connected
+            account={account}
+            candidates={candidates}
+            remainingTime={remainingTime}
+            number={number}
+            handleNumberChange={handleNumberChange}
+            voteFunction={vote}
+            showButton={CanVote}
+          />
+        ) : (
+          <Login connectWallet={connectToMetamask} />
+        )
       ) : (
-        <Login connectWallet={connectToMetamask} />
+        <Finished />
       )}
     </div>
   );
